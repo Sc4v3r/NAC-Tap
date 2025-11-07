@@ -913,20 +913,51 @@ def enable_internet_routing(bridge_name='br0'):
         
         log(f"Using gateway interface: {gateway_iface}")
         
+        # Check if eth interface has internet access
+        log(f"Testing {gateway_iface} connectivity...")
+        result = run_cmd(['ping', '-c', '1', '-W', '2', '-I', gateway_iface, '8.8.8.8'])
+        if not result or result.returncode != 0:
+            log(f"WARNING: {gateway_iface} cannot reach internet", 'WARNING')
+            log("Continuing anyway - check your network connection")
+        else:
+            log(f"{gateway_iface} has internet connectivity")
+        
+        # Ensure bridge has an IP if not already
+        result = run_cmd(['ip', 'addr', 'show', bridge_name])
+        if result and result.returncode == 0:
+            if CONFIG['BRIDGE_IP'] not in result.stdout:
+                log(f"Adding IP {CONFIG['BRIDGE_IP']} to {bridge_name}")
+                run_cmd(['ip', 'addr', 'add', f"{CONFIG['BRIDGE_IP']}/24", 'dev', bridge_name])
+        
         # Enable IP forwarding
         run_cmd(['sysctl', '-w', 'net.ipv4.ip_forward=1'])
         log("IP forwarding enabled")
         
-        # Setup NAT for appliance to access internet
-        # POSTROUTING: Traffic from bridge to gateway interface
-        result = run_cmd(['iptables', '-t', 'nat', '-A', 'POSTROUTING', '-o', gateway_iface, '-j', 'MASQUERADE'])
-        if result and result.returncode == 0:
-            log(f"NAT rule added for {gateway_iface}")
+        # Flush any existing NAT rules to avoid conflicts
+        run_cmd(['iptables', '-t', 'nat', '-F', 'POSTROUTING'])
         
-        # Allow forwarding
-        run_cmd(['iptables', '-A', 'FORWARD', '-i', bridge_name, '-o', gateway_iface, '-j', 'ACCEPT'])
-        run_cmd(['iptables', '-A', 'FORWARD', '-i', gateway_iface, '-o', bridge_name, '-m', 'state', '--state', 'RELATED,ESTABLISHED', '-j', 'ACCEPT'])
+        # Setup NAT for bridge traffic to go out via gateway
+        result = run_cmd(['iptables', '-t', 'nat', '-A', 'POSTROUTING', '-s', '10.200.66.0/24', '-o', gateway_iface, '-j', 'MASQUERADE'])
+        if result and result.returncode == 0:
+            log(f"NAT rule added: bridge -> {gateway_iface}")
+        else:
+            log("NAT rule may have failed", 'WARNING')
+        
+        # Allow forwarding both ways
+        run_cmd(['iptables', '-I', 'FORWARD', '1', '-i', bridge_name, '-o', gateway_iface, '-j', 'ACCEPT'])
+        run_cmd(['iptables', '-I', 'FORWARD', '1', '-i', gateway_iface, '-o', bridge_name, '-j', 'ACCEPT'])
         log("Forwarding rules added")
+        
+        # Add default route via the bridge if not present
+        run_cmd(['ip', 'route', 'add', 'default', 'via', CONFIG['BRIDGE_IP'], 'dev', bridge_name, 'metric', '100'])
+        
+        # Test connectivity from bridge
+        log("Testing internet from bridge...")
+        result = run_cmd(['ping', '-c', '1', '-W', '3', '8.8.8.8'], timeout=5)
+        if result and result.returncode == 0:
+            log("Internet routing WORKING - ping successful!", 'SUCCESS')
+        else:
+            log("Internet test ping failed - check network", 'WARNING')
         
         log(f"Internet routing enabled via {gateway_iface}", 'SUCCESS')
         return True
