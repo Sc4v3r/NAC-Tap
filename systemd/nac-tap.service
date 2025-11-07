@@ -1,0 +1,22 @@
+[Unit]
+Description=NAC Tap - Transparent Bridge Monitor
+After=network.target hostapd.service dnsmasq.service
+Wants=hostapd.service dnsmasq.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/nac-tap
+ExecStart=/usr/bin/python3 /opt/nac-tap/nac-tap.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
