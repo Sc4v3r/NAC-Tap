@@ -1,0 +1,12 @@
+# NAC Bridge Monitor - Python Requirements
+# All dependencies are from Python 3 standard library
+# No external Python packages required
+
+# Python 3.7+ required for:
+# - subprocess features
+# - f-strings
+# - type hints support
+
+# Note: This script requires Python 3.7 or higher
+# Verify with: python3 --version
+
