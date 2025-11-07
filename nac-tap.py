@@ -1564,14 +1564,30 @@ class NACWebHandler(BaseHTTPRequestHandler):
         # Test page for debugging
         elif path == '/test':
             try:
-                with open('/Users/ben.jacob/Documents/MITM/test-webui.html', 'r') as f:
-                    test_html = f.read()
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                self.wfile.write(test_html.encode())
+                # Try multiple locations for the test file
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                possible_paths = [
+                    os.path.join(script_dir, 'test-webui.html'),
+                    '/Users/ben.jacob/Documents/MITM/test-webui.html',
+                    './test-webui.html'
+                ]
+                
+                test_html = None
+                for test_path in possible_paths:
+                    if os.path.exists(test_path):
+                        with open(test_path, 'r') as f:
+                            test_html = f.read()
+                        break
+                
+                if test_html:
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/html')
+                    self.end_headers()
+                    self.wfile.write(test_html.encode())
+                else:
+                    self.send_error(404, "Test page not found in any location")
             except Exception as e:
-                self.send_error(404, f"Test page not found: {e}")
+                self.send_error(404, f"Test page error: {e}")
             
         else:
             self.send_error(404)
