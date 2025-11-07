@@ -136,6 +136,14 @@ input[type="text"]:focus{outline:none;border-color:#667eea}
 <div class="card-value" id="captureDuration">00:00:00</div>
 <div class="card-detail">Elapsed time</div>
 </div>
+<div class="card" id="routingCard" style="border-left-color:#17a2b8">
+<div class="card-title">Internet Routing</div>
+<div class="card-detail" id="routingStatus">Disabled</div>
+<div style="margin-top:10px">
+<button id="btnEnableRouting" class="btn btn-start" onclick="enableRouting()" style="padding:6px 12px;font-size:.85em;margin-right:5px">Enable</button>
+<button id="btnDisableRouting" class="btn btn-danger" onclick="disableRouting()" style="padding:6px 12px;font-size:.85em" disabled>Disable</button>
+</div>
+</div>
 </div>
 <div id="captureInfo" class="capture-info">
 <h3>Active Capture</h3>
