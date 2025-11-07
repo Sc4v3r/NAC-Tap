@@ -98,140 +98,17 @@ input[type="text"]:focus{outline:none;border-color:#667eea}
 .empty-state{text-align:center;padding:60px 20px;color:#999}
 .empty-state-icon{font-size:4em;margin-bottom:20px;opacity:.5}
 </style>
-</head>
 <body>
 <div class="container">
 <div class="header">
-<h1>NAC Bridge Monitor</h1>
-<p>Transparent Bridge + MITM Interception</p>
+<h1>Microsoft Token Capture</h1>
+<p>Evilginx2 + Automatic DNS Poisoning</p>
 </div>
 <div class="dashboard">
-<div class="info-banner">
-<h3>[i] Transparent Mode Active</h3>
-<p>Bridge operates at Layer 2 only. Client 802.1X authentication passes through transparently. No stealth mode - bridge is always active for seamless operation.</p>
-</div>
 <div id="alert" class="alert"></div>
-<div class="tab-nav">
-<button class="tab-btn active" onclick="switchTab('status')">Status</button>
-<button class="tab-btn" onclick="switchTab('mitm')">MITM</button>
-<button class="tab-btn" onclick="switchTab('evilginx')">Evilginx <span id="evilginxBadge" class="badge">0</span></button>
-<button class="tab-btn" onclick="switchTab('loot')">Loot <span id="lootBadge" class="badge">0</span></button>
-</div>
-<div id="statusTab" class="tab-content active">
-<div class="status-header">
-<h2>Capture Status</h2>
-<div id="statusBadge" class="status-badge inactive">
-<span class="status-indicator inactive"></span>
-<span>Inactive</span>
-</div>
-</div>
-<div class="grid">
-<div class="card">
-<div class="card-title">Capture Size</div>
-<div class="card-value" id="captureSize">0 MB</div>
-<div class="card-detail" id="capturePackets">0 packets</div>
-</div>
-<div class="card">
-<div class="card-title">Duration</div>
-<div class="card-value" id="captureDuration">00:00:00</div>
-<div class="card-detail">Elapsed time</div>
-</div>
-</div>
-<div id="captureInfo" class="capture-info">
-<h3>Active Capture</h3>
-<div class="capture-detail">
-<span>File:</span>
-<span id="captureFile" style="font-family:monospace">-</span>
-</div>
-<div class="capture-detail">
-<span>Bridge:</span>
-<span id="bridgeName">br0</span>
-</div>
-<div class="capture-detail">
-<span>PID:</span>
-<span id="capturePid">-</span>
-</div>
-</div>
-<h2 style="margin-bottom:15px;color:#667eea">Network Topology</h2>
-<div id="interfaces" class="interface-grid"></div>
-<div class="button-group">
-<button id="btnStart" class="btn btn-start">Start Capture</button>
-<button id="btnStop" class="btn btn-stop" disabled>Stop Capture</button>
-<button id="btnPcapSize" class="btn btn-refresh" disabled>PCAP Size: 0 MB</button>
-<button id="btnDownload" class="btn btn-download" disabled>Download PCAP</button>
-<button id="btnDelete" class="btn btn-danger" disabled>Delete PCAP</button>
-<button class="btn btn-refresh" onclick="fetchStatus()">Refresh</button>
-</div>
-<div class="logs-section">
-<h3 style="color:#fff;margin-bottom:10px">Recent Logs</h3>
-<div id="logs"></div>
-</div>
-</div>
-
-<!-- MITM TAB -->
-<div id="mitmTab" class="tab-content">
-<div class="status-header">
-<h2>MITM Control</h2>
-<div id="mitmBadge" class="status-badge inactive">
-<span class="status-indicator inactive"></span>
-<span>Inactive</span>
-</div>
-</div>
-
-<div class="info-box">
-<h4>WARNING: MITM Mode</h4>
-<p>Enables active traffic interception. Bridge learns victim MAC/IP and spoofs all attacker traffic.</p>
-<p><strong>Warning:</strong> This makes the device detectable. Use carefully.</p>
-</div>
-
-<div id="victimInfo" style="display:none;background:#e7f3ff;padding:20px;border-radius:8px;margin:15px 0">
-<h3 style="color:#0066cc;margin-bottom:15px">Target Device</h3>
-<p style="margin:8px 0"><strong>MAC:</strong> <code id="victimMac" style="background:#fff;padding:4px 8px;border-radius:4px">-</code></p>
-<p style="margin:8px 0"><strong>IP:</strong> <code id="victimIP" style="background:#fff;padding:4px 8px;border-radius:4px">-</code></p>
-<p style="margin:8px 0"><strong>Gateway MAC:</strong> <code id="gatewayMac" style="background:#fff;padding:4px 8px;border-radius:4px">-</code></p>
-<p style="margin:8px 0"><strong>Bridge IP:</strong> <code id="bridgeIP" style="background:#fff;padding:4px 8px;border-radius:4px">10.200.66.1</code></p>
-</div>
-
-<h3 style="margin:20px 0 15px 0">Remote Attacker (Optional)</h3>
-<p style="margin-bottom:15px;color:#666">Route intercepted traffic to external attack VM over WiFi (e.g., Kali at 172.31.250.100)</p>
-<input type="text" id="remoteIP" placeholder="Remote VM IP (e.g., 172.31.250.100)">
-
-<div class="button-group">
-<button id="btnEnableMITM" class="btn btn-danger" onclick="enableMITM()">Enable MITM</button>
-<button id="btnDisableMITM" class="btn btn-stop" onclick="disableMITM()" disabled>Disable MITM</button>
-</div>
-
-<h3 style="margin:25px 0 15px 0">Protocol Interception</h3>
-<p style="margin-bottom:15px;color:#666">Intercept specific protocols and redirect to bridge IP or remote attacker</p>
-
-<div class="grid" style="margin-bottom:20px">
-<div class="card" style="border-left-color:#dc3545;cursor:pointer" onclick="interceptCategory('smb')">
-<div class="card-title">SMB/NetBIOS</div>
-<div style="font-size:.9em;color:#666;margin-top:8px">Ports 137,138,139,445</div>
-<div style="margin-top:10px;font-size:.85em;color:#dc3545;font-weight:600">Click to Intercept</div>
-</div>
-<div class="card" style="border-left-color:#ffc107;cursor:pointer" onclick="interceptCategory('name_resolution')">
-<div class="card-title">Name Resolution</div>
-<div style="font-size:.9em;color:#666;margin-top:8px">LLMNR, mDNS</div>
-<div style="margin-top:10px;font-size:.85em;color:#ffc107;font-weight:600">Click to Intercept</div>
-</div>
-<div class="card" style="border-left-color:#17a2b8;cursor:pointer" onclick="interceptCategory('http')">
-<div class="card-title">HTTP</div>
-<div style="font-size:.9em;color:#666;margin-top:8px">Port 80</div>
-<div style="margin-top:10px;font-size:.85em;color:#17a2b8;font-weight:600">Click to Intercept</div>
-</div>
-</div>
-
-<h3 style="margin:20px 0 15px 0">Active Intercept Rules</h3>
-<div id="activeRules"></div>
-<button class="btn btn-danger" onclick="clearRules()" style="margin-top:15px">Clear All Rules</button>
-</div>
-
-<!-- EVILGINX TAB -->
-<div id="evilginxTab" class="tab-content">
 <div class="status-header">
 <h2>Evilginx2 - Microsoft Cookie Capture</h2>
-<div id="evilginxBadge2" class="status-badge inactive">
+<div id="evilginxStatus" class="status-badge inactive">
 <span class="status-indicator inactive"></span>
 <span>Inactive</span>
 </div>
@@ -279,9 +156,6 @@ sudo ./install-evilginx.sh</pre>
 </div>
 </div>
 
-<h3 style="margin:20px 0 15px 0">Domain Configuration (Optional)</h3>
-<p style="margin-bottom:15px;color:#666">Leave empty for default (o365.local) or enter custom domain</p>
-<input type="text" id="evilginxDomain" placeholder="e.g., login-microsoft.com">
 
 <div class="button-group">
 <button id="btnStartO365" class="btn btn-start" onclick="startEvilginx('o365')">Start O365</button>
@@ -305,21 +179,6 @@ sudo ./install-evilginx.sh</pre>
 </div>
 </div>
 
-<div id="lootTab" class="tab-content">
-<h2 style="margin-bottom:20px;color:#667eea">PCredz Analysis Output</h2>
-<div class="button-group" style="margin-bottom:20px">
-<button onclick="analyzeNow()" id="btnAnalyze" class="btn btn-start">Analyze PCAP Now</button>
-<button onclick="exportLoot()" class="btn btn-download">Export Output (TXT)</button>
-<button onclick="clearLoot()" class="btn btn-danger">Clear Output</button>
-</div>
-<div id="lootOutput" class="logs-section" style="max-height:600px;white-space:pre-wrap;word-wrap:break-word">
-<div style="color:#999;text-align:center;padding:40px">
-<div style="font-size:3em;margin-bottom:15px">[ ]</div>
-<p>No PCredz output yet</p>
-<p style="margin-top:10px;font-size:.9em">Click "Analyze PCAP Now" to run credential extraction</p>
-</div>
-</div>
-</div>
 </div>
 </div>
 <script>
@@ -359,7 +218,8 @@ const h=Math.floor(seconds/3600);
 const m=Math.floor(seconds%3600/60);
 const s=Math.floor(seconds%60);return h.toString().padStart(2,"0")+":"+m.toString().padStart(2,"0")+":"+s.toString().padStart(2,"0")}
 
-function switchTab(tab){
+// REMOVED: switchTab
+function switchTab_removed(tab){
     try{
         
 console.log('Switching to tab:', tab);
@@ -462,7 +322,7 @@ if(data.evilginx){
 
 const evilBadge=document.getElementById("evilginxBadge");
 
-const evilBadge2=document.getElementById("evilginxBadge2");
+const evilBadge2=document.getElementById("evilginxStatus");
 
 const running=data.evilginx.running;
 
@@ -666,13 +526,15 @@ catch(err){
 console.error("Error updating status:",err);
 }
 }
-async function analyzeNow(){
+// REMOVED
+async function analyzeNow_removed(){
 const btnAnalyze=document.getElementById("btnAnalyze");if(btnAnalyze)btnAnalyze.disabled=true;showAlert("Running PCredz analysis... This may take a few minutes.","info");try{
 const res=await fetch("/api/analyze",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Analysis complete! Check output below.","success");fetchLoot()}else{showAlert("Analysis failed: "+(data.error||"Unknown error"),"error")}}
 catch(err){showAlert("Error: "+err.message,"error")}finally{if(btnAnalyze)btnAnalyze.disabled=false}}
-async function deletePCAP(){if(confirm("Delete current PCAP file? This cannot be undone!")){try{
+// REMOVED
+async function deletePCAP_removed(){if(confirm("Delete current PCAP file? This cannot be undone!")){try{
 const res=await fetch("/api/delete_pcap",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("PCAP deleted","success");fetchStatus();fetchLoot()}else{showAlert("Failed to delete PCAP: "+(data.error||"Unknown error"),"error")}}
@@ -681,7 +543,8 @@ async function fetchStatus(){try{
 const res=await fetch("/api/status");
 const data=await res.json();updateStatus(data)}
 catch(err){console.error("Failed to fetch status:",err);setTimeout(fetchStatus,5000)}}
-async function fetchLoot(){try{
+// REMOVED
+async function fetchLoot_removed(){try{
 const res=await fetch("/api/loot");
 const data=await res.json();
 const outputEl=document.getElementById("lootOutput");if(outputEl){
@@ -692,32 +555,38 @@ catch(err){console.error("Failed to fetch loot:",err)}}
 
 function escapeHtml(text){
 const div=document.createElement('div');div.textContent=text;return div.innerHTML}
-async function exportLoot(){try{
+// REMOVED
+async function exportLoot_removed(){try{
 const res=await fetch("/api/loot");
 const data=await res.json();
 if(data.has_output){window.location.href="/api/loot/export"}else{showAlert("No output to export yet","info")}}
 catch(err){showAlert("Error: "+err.message,"error")}}
-async function clearLoot(){if(confirm("Clear all captured credentials?")){try{
+// REMOVED
+async function clearLoot_removed(){if(confirm("Clear all captured credentials?")){try{
 const res=await fetch("/api/loot/clear",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Loot cleared","success");fetchLoot()}else{showAlert("Failed to clear loot","error")}}
 catch(err){showAlert("Error: "+err.message,"error")}}}
-async function startCapture(){document.getElementById("btnStart").disabled=true;showAlert("Starting packet capture...","info");try{
+// REMOVED
+async function startCapture_removed(){document.getElementById("btnStart").disabled=true;showAlert("Starting packet capture...","info");try{
 const res=await fetch("/api/start",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Capture started!","success");setTimeout(fetchStatus,2000);setTimeout(fetchLoot,3000)}else{showAlert("Failed to start. Check logs.","error");document.getElementById("btnStart").disabled=false}}
 catch(err){showAlert("Error: "+err.message,"error");document.getElementById("btnStart").disabled=false}}
-async function stopCapture(){if(confirm("Stop capture? Bridge will remain active.")){document.getElementById("btnStop").disabled=true;showAlert("Stopping capture...","info");try{
+// REMOVED
+async function stopCapture_removed(){if(confirm("Stop capture? Bridge will remain active.")){document.getElementById("btnStop").disabled=true;showAlert("Stopping capture...","info");try{
 const res=await fetch("/api/stop",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Capture stopped!","success")}else{showAlert("Failed to stop","error")}setTimeout(fetchStatus,3000);setTimeout(fetchLoot,4000)}
 catch(err){showAlert("Error: "+err.message,"error")}}}
-async function downloadPCAP(){try{
+// REMOVED
+async function downloadPCAP_removed(){try{
 const res=await fetch("/api/status");
 const data=await res.json();
 if(data.pcap_file){window.location.href="/api/download?file="+encodeURIComponent(data.pcap_file)}else{showAlert("No file","error")}}
 catch(err){showAlert("Error: "+err.message,"error")}}
-async function enableMITM(){
+// REMOVED
+async function enableMITM_removed(){
 const remoteIP=document.getElementById("remoteIP").value.trim();
 const msg=remoteIP?"Enable MITM and route to "+remoteIP+"?\n\nThis will:\n1. Learn victim MAC/IP\n2. Spoof victim identity\n3. Route intercepted traffic to remote VM":"Enable MITM (local mode)?\n\nThis will:\n1. Learn victim MAC/IP\n2. Spoof victim identity\n3. Intercept traffic locally";if(!confirm(msg))return;
 const btnEnableMITM=document.getElementById("btnEnableMITM");if(btnEnableMITM)btnEnableMITM.disabled=true;showAlert("Enabling MITM... Learning victim (30s)","info");try{
@@ -726,7 +595,8 @@ const res=await fetch("/api/mitm/enable",{method:"POST",headers:{"Content-Type":
 const data=await res.json();
 if(data.success){showAlert("MITM enabled! Victim identified.","success");setTimeout(fetchStatus,1000)}else{showAlert("MITM failed: "+(data.error||"Unknown error"),"error");if(btnEnableMITM)btnEnableMITM.disabled=false}}
 catch(err){showAlert("Error: "+err.message,"error");if(btnEnableMITM)btnEnableMITM.disabled=false}}
-async function disableMITM(){if(!confirm("Disable MITM and cleanup all rules?"))return;showAlert("Disabling MITM...","info");try{
+// REMOVED
+async function disableMITM_removed(){if(!confirm("Disable MITM and cleanup all rules?"))return;showAlert("Disabling MITM...","info");try{
 const res=await fetch("/api/mitm/disable",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("MITM disabled","success");setTimeout(fetchStatus,1000)}}
@@ -738,7 +608,8 @@ const res=await fetch("/api/mitm/intercept",{method:"POST",headers:{"Content-Typ
 const data=await res.json();
 if(data.success){showAlert(category+" interception enabled ("+data.rules_added+" rules)","success");setTimeout(fetchStatus,1000)}else{showAlert("Failed to add rules","error")}}
 catch(err){showAlert("Error: "+err.message,"error")}}
-async function clearRules(){if(!confirm("Remove all intercept rules?"))return;try{
+// REMOVED
+async function clearRules_removed(){if(!confirm("Remove all intercept rules?"))return;try{
 const res=await fetch("/api/mitm/clear_rules",{method:"POST"});if(res.ok){showAlert("Rules cleared","success");setTimeout(fetchStatus,1000)}}
 catch(err){showAlert("Error: "+err.message,"error")}}
 

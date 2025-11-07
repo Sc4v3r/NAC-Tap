@@ -1681,24 +1681,13 @@ class NACWebHandler(BaseHTTPRequestHandler):
     def _send_html(self):
         """Serve HTML from external file or fallback to embedded"""
         try:
-            # Try to load from external file first
             script_dir = os.path.dirname(os.path.abspath(__file__))
+            html_path = os.path.join(script_dir, 'app', 'static', 'index.html')
             
-            # Try simple UI first, then full UI, then embedded
-            html_paths = [
-                os.path.join(script_dir, 'app', 'static', 'index-simple.html'),
-                os.path.join(script_dir, 'app', 'static', 'index.html')
-            ]
-            
-            html_content = None
-            for html_path in html_paths:
-                if os.path.exists(html_path):
-                    with open(html_path, 'r', encoding='utf-8') as f:
-                        html_content = f.read()
-                    log(f"Serving UI from: {html_path}")
-                    break
-            
-            if not html_content:
+            if os.path.exists(html_path):
+                with open(html_path, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+            else:
                 # Fallback to embedded template
                 html_content = get_html_template()
             
