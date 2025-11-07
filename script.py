@@ -70,70 +70,6 @@ def is_mgmt_interface(iface):
     return (os.path.exists(f"/sys/class/net/{iface}/wireless") or
             os.path.exists(f"/sys/class/net/{iface}/phy80211"))
 
-def sync_time_ntp():
-    """Synchronize system time using NTP"""
-    try:
-        log("Attempting NTP time synchronization...")
-        
-        # Try timedatectl first (systemd systems)
-        result = run_cmd(['timedatectl', 'set-ntp', 'true'], timeout=5)
-        if result and result.returncode == 0:
-            time.sleep(2)  # Wait for sync
-            result = run_cmd(['timedatectl', 'status'], timeout=5)
-            if result:
-                log("NTP sync enabled via timedatectl")
-                for line in result.stdout.split('\n'):
-                    if 'synchronized: yes' in line.lower() or 'ntp service: active' in line.lower():
-                        log("✓ System time synchronized via NTP", 'SUCCESS')
-                        return True
-        
-        # Try ntpdate as fallback
-        result = run_cmd(['which', 'ntpdate'], timeout=2)
-        if result and result.returncode == 0:
-            ntp_servers = ['pool.ntp.org', '0.pool.ntp.org', 'time.google.com']
-            for server in ntp_servers:
-                log(f"Trying NTP server: {server}")
-                result = run_cmd(['ntpdate', '-u', server], timeout=10)
-                if result and result.returncode == 0:
-                    log(f"✓ Time synchronized with {server}", 'SUCCESS')
-                    return True
-        
-        # Try chrony
-        result = run_cmd(['which', 'chronyc'], timeout=2)
-        if result and result.returncode == 0:
-            run_cmd(['chronyc', 'makestep'], timeout=5)
-            result = run_cmd(['chronyc', 'tracking'], timeout=5)
-            if result and result.returncode == 0:
-                log("✓ Time synchronized via chrony", 'SUCCESS')
-                return True
-        
-        log("NTP sync attempted - verify time manually if needed", 'WARNING')
-        return False
-        
-    except Exception as e:
-        log(f"NTP sync failed: {e}", 'WARNING')
-        return False
-
-def get_current_time_info():
-    """Get current system time and NTP status"""
-    info = {
-        'local_time': datetime.now().isoformat(),
-        'local_time_str': datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z'),
-        'timestamp': int(time.time()),
-        'ntp_synced': False
-    }
-    
-    try:
-        # Check NTP sync status
-        result = run_cmd(['timedatectl', 'status'], timeout=2)
-        if result and result.returncode == 0:
-            if 'synchronized: yes' in result.stdout.lower() or 'ntp service: active' in result.stdout.lower():
-                info['ntp_synced'] = True
-    except Exception:
-        pass
-    
-    return info
-
 # ============================================================================
 # LOOT ANALYZER
 # ============================================================================
@@ -621,7 +557,6 @@ class BridgeManager:
 
     def get_status(self):
         """Get current status"""
-        time_info = get_current_time_info()
         status = {
             'status': 'inactive',
             'bridge': None,
@@ -634,11 +569,7 @@ class BridgeManager:
             'start_time': None,
             'client_ip': self.client_ip,
             'gateway_ip': self.gateway_ip,
-            'logs': self._get_logs(),
-            'server_time': time_info['local_time'],
-            'server_time_str': time_info['local_time_str'],
-            'server_timestamp': time_info['timestamp'],
-            'ntp_synced': time_info['ntp_synced']
+            'logs': self._get_logs()
         }
 
         if self.tcpdump_process and self.tcpdump_process.poll() is None:
@@ -1005,15 +936,9 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:linear-gradient(135deg,
 <div id="statusTab" class="tab-content active">
 <div class="status-header">
 <h2>Capture Status</h2>
-<div style="display:flex;gap:15px;align-items:center">
 <div id="statusBadge" class="status-badge inactive">
 <span class="status-indicator inactive"></span>
 <span>Inactive</span>
-</div>
-<div style="font-size:.85em;color:#666">
-<div>Server Time: <span id="serverTime" style="font-weight:600;color:#333">Loading...</span></div>
-<div style="margin-top:2px">NTP: <span id="ntpStatus" style="font-weight:600">Checking...</span></div>
-</div>
 </div>
 </div>
 <div class="grid">
@@ -1081,7 +1006,7 @@ function showAlert(message,type="info"){const el=document.getElementById("alert"
 function formatBytes(bytes){if(bytes===0)return"0 B";const k=1024,sizes=["B","KB","MB","GB"];const i=Math.floor(Math.log(bytes)/Math.log(k));return parseFloat((bytes/Math.pow(k,i)).toFixed(2))+" "+sizes[i]}
 function formatDuration(seconds){const h=Math.floor(seconds/3600);const m=Math.floor(seconds%3600/60);const s=Math.floor(seconds%60);return`${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`}
 function switchTab(tab){document.querySelectorAll(".tab-content").forEach(el=>el.classList.remove("active"));document.querySelectorAll(".tab-btn").forEach(el=>el.classList.remove("active"));document.getElementById(tab+"Tab").classList.add("active");event.target.classList.add("active");if(tab==="loot")fetchLoot()}
-function updateStatus(data){try{const isActive=data.status==="active";const badge=document.getElementById("statusBadge");if(badge){badge.className=`status-badge ${isActive?"active":"inactive"}`;badge.innerHTML=`<span class="status-indicator ${isActive?"active":"inactive"}"></span><span>${isActive?"Capturing":"Inactive"}</span>`}const serverTime=document.getElementById("serverTime");if(serverTime&&data.server_time_str){serverTime.textContent=data.server_time_str}const ntpStatus=document.getElementById("ntpStatus");if(ntpStatus){ntpStatus.textContent=data.ntp_synced?"✓ Synced":"⚠ Not Synced";ntpStatus.style.color=data.ntp_synced?"#28a745":"#ffc107"}const captureInfo=document.getElementById("captureInfo");if(captureInfo){captureInfo.className=`capture-info ${isActive?"active":""}`}const size=data.pcap_size||0;const packets=data.packet_count||0;const pcapSizeBtn=document.getElementById("btnPcapSize");if(pcapSizeBtn){pcapSizeBtn.textContent=`📊 PCAP Size: ${formatBytes(size)}`;pcapSizeBtn.disabled=!data.pcap_file}if(isActive){const captureFile=document.getElementById("captureFile");if(captureFile)captureFile.textContent=data.pcap_file?data.pcap_file.split("/").pop():"-";const capturePid=document.getElementById("capturePid");if(capturePid)capturePid.textContent=data.pid||"-";const bridgeName=document.getElementById("bridgeName");if(bridgeName)bridgeName.textContent=data.bridge||"br0";const captureSize=document.getElementById("captureSize");if(captureSize)captureSize.textContent=formatBytes(size);const capturePackets=document.getElementById("capturePackets");if(capturePackets)capturePackets.textContent=packets.toLocaleString()+" packets";if(data.start_time){if(!startTime)try{startTime=new Date(data.start_time)}catch(e){startTime=new Date}const elapsed=Math.floor((new Date()-startTime)/1000);const captureDuration=document.getElementById("captureDuration");if(captureDuration)captureDuration.textContent=formatDuration(elapsed);const captureStartTime=document.getElementById("captureStartTime");if(captureStartTime)captureStartTime.textContent="Started "+startTime.toLocaleTimeString()}const btnStart=document.getElementById("btnStart");if(btnStart)btnStart.disabled=true;const btnStop=document.getElementById("btnStop");if(btnStop)btnStop.disabled=false;const btnDelete=document.getElementById("btnDelete");if(btnDelete)btnDelete.disabled=true;const btnDownload=document.getElementById("btnDownload");if(btnDownload)btnDownload.disabled=false}else{const btnStart=document.getElementById("btnStart");if(btnStart)btnStart.disabled=false;const btnStop=document.getElementById("btnStop");if(btnStop)btnStop.disabled=true;const btnDelete=document.getElementById("btnDelete");if(btnDelete)btnDelete.disabled=!data.pcap_file;const btnDownload=document.getElementById("btnDownload");if(btnDownload)btnDownload.disabled=!data.pcap_file;startTime=null;const captureSize=document.getElementById("captureSize");if(captureSize)captureSize.textContent=data.pcap_size?formatBytes(data.pcap_size):"0 MB";const capturePackets=document.getElementById("capturePackets");if(capturePackets)capturePackets.textContent="0 packets";const captureDuration=document.getElementById("captureDuration");if(captureDuration)captureDuration.textContent="00:00:00";const captureStartTime=document.getElementById("captureStartTime");if(captureStartTime)captureStartTime.textContent="Not started"}if(data.interfaces){const container=document.getElementById("interfaces");if(container){container.innerHTML=data.interfaces.map(intf=>`<div class="interface-card"><div class="interface-header"><span class="interface-name">${intf.name}</span><span class="interface-status ${intf.state==="UP"?"up":"down"}">${intf.state}</span></div><div class="interface-detail"><span>MAC:</span><span style="font-family:monospace">${intf.mac||"N/A"}</span></div><div class="interface-detail"><span>Speed:</span><span>${intf.speed||"Unknown"}</span></div><div class="interface-detail"><span>Role:</span><span>${intf.role||"N/A"}</span></div>${intf.bridge?`<div class="interface-detail"><span>Bridge:</span><span>${intf.bridge}</span></div>`:""}</div>`).join("")}}if(data.logs&&data.logs.length>0){const logEl=document.getElementById("logs");if(logEl){logEl.innerHTML=data.logs.map(line=>`<div style="padding:2px 0">${line}</div>`).join("");logEl.scrollTop=logEl.scrollHeight}}}catch(err){console.error("Error updating status:",err)}}
+function updateStatus(data){try{const isActive=data.status==="active";const badge=document.getElementById("statusBadge");if(badge){badge.className=`status-badge ${isActive?"active":"inactive"}`;badge.innerHTML=`<span class="status-indicator ${isActive?"active":"inactive"}"></span><span>${isActive?"Capturing":"Inactive"}</span>`}const captureInfo=document.getElementById("captureInfo");if(captureInfo){captureInfo.className=`capture-info ${isActive?"active":""}`}const size=data.pcap_size||0;const packets=data.packet_count||0;const pcapSizeBtn=document.getElementById("btnPcapSize");if(pcapSizeBtn){pcapSizeBtn.textContent=`📊 PCAP Size: ${formatBytes(size)}`;pcapSizeBtn.disabled=!data.pcap_file}if(isActive){const captureFile=document.getElementById("captureFile");if(captureFile)captureFile.textContent=data.pcap_file?data.pcap_file.split("/").pop():"-";const capturePid=document.getElementById("capturePid");if(capturePid)capturePid.textContent=data.pid||"-";const bridgeName=document.getElementById("bridgeName");if(bridgeName)bridgeName.textContent=data.bridge||"br0";const captureSize=document.getElementById("captureSize");if(captureSize)captureSize.textContent=formatBytes(size);const capturePackets=document.getElementById("capturePackets");if(capturePackets)capturePackets.textContent=packets.toLocaleString()+" packets";if(data.start_time){if(!startTime)try{startTime=new Date(data.start_time)}catch(e){startTime=new Date}const elapsed=Math.floor((new Date()-startTime)/1000);const captureDuration=document.getElementById("captureDuration");if(captureDuration)captureDuration.textContent=formatDuration(elapsed);const captureStartTime=document.getElementById("captureStartTime");if(captureStartTime)captureStartTime.textContent="Started "+startTime.toLocaleTimeString()}const btnStart=document.getElementById("btnStart");if(btnStart)btnStart.disabled=true;const btnStop=document.getElementById("btnStop");if(btnStop)btnStop.disabled=false;const btnDelete=document.getElementById("btnDelete");if(btnDelete)btnDelete.disabled=true;const btnDownload=document.getElementById("btnDownload");if(btnDownload)btnDownload.disabled=false}else{const btnStart=document.getElementById("btnStart");if(btnStart)btnStart.disabled=false;const btnStop=document.getElementById("btnStop");if(btnStop)btnStop.disabled=true;const btnDelete=document.getElementById("btnDelete");if(btnDelete)btnDelete.disabled=!data.pcap_file;const btnDownload=document.getElementById("btnDownload");if(btnDownload)btnDownload.disabled=!data.pcap_file;startTime=null;const captureSize=document.getElementById("captureSize");if(captureSize)captureSize.textContent=data.pcap_size?formatBytes(data.pcap_size):"0 MB";const capturePackets=document.getElementById("capturePackets");if(capturePackets)capturePackets.textContent="0 packets";const captureDuration=document.getElementById("captureDuration");if(captureDuration)captureDuration.textContent="00:00:00";const captureStartTime=document.getElementById("captureStartTime");if(captureStartTime)captureStartTime.textContent="Not started"}if(data.interfaces){const container=document.getElementById("interfaces");if(container){container.innerHTML=data.interfaces.map(intf=>`<div class="interface-card"><div class="interface-header"><span class="interface-name">${intf.name}</span><span class="interface-status ${intf.state==="UP"?"up":"down"}">${intf.state}</span></div><div class="interface-detail"><span>MAC:</span><span style="font-family:monospace">${intf.mac||"N/A"}</span></div><div class="interface-detail"><span>Speed:</span><span>${intf.speed||"Unknown"}</span></div><div class="interface-detail"><span>Role:</span><span>${intf.role||"N/A"}</span></div>${intf.bridge?`<div class="interface-detail"><span>Bridge:</span><span>${intf.bridge}</span></div>`:""}</div>`).join("")}}if(data.logs&&data.logs.length>0){const logEl=document.getElementById("logs");if(logEl){logEl.innerHTML=data.logs.map(line=>`<div style="padding:2px 0">${line}</div>`).join("");logEl.scrollTop=logEl.scrollHeight}}}catch(err){console.error("Error updating status:",err)}}
 async function analyzeNow(){const btnAnalyze=document.getElementById("btnAnalyze");if(btnAnalyze)btnAnalyze.disabled=true;showAlert("Running PCredz analysis... This may take a few minutes.","info");try{const res=await fetch("/api/analyze",{method:"POST"});const data=await res.json();if(data.success){showAlert("Analysis complete! Check output below.","success");fetchLoot()}else{showAlert("Analysis failed: "+(data.error||"Unknown error"),"error")}}catch(err){showAlert("Error: "+err.message,"error")}finally{if(btnAnalyze)btnAnalyze.disabled=false}}
 async function deletePCAP(){if(confirm("Delete current PCAP file? This cannot be undone!")){try{const res=await fetch("/api/delete_pcap",{method:"POST"});const data=await res.json();if(data.success){showAlert("PCAP deleted","success");fetchStatus();fetchLoot()}else{showAlert("Failed to delete PCAP: "+(data.error||"Unknown error"),"error")}}catch(err){showAlert("Error: "+err.message,"error")}}}
 document.getElementById("btnDelete").addEventListener("click",deletePCAP);
@@ -1121,12 +1046,6 @@ def main():
     if os.geteuid() != 0:
         print("❌ Must run as root: sudo python3 nac-monitor.py")
         return 1
-
-    # Sync time via NTP
-    print("🕐 Synchronizing time via NTP...")
-    sync_time_ntp()
-    print(f"   Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print()
 
     # Check dependencies
     missing = []
