@@ -913,54 +913,53 @@ def enable_internet_routing(bridge_name='br0'):
         
         log(f"Using gateway interface: {gateway_iface}")
         
-        # Get the real gateway IP address (the router/upstream device)
-        gateway_ip = None
-        result = run_cmd(['ip', 'route', 'show', 'default'])
-        if result and result.returncode == 0 and result.stdout:
-            # Parse "default via 192.168.1.1 dev eth0"
-            match = re.search(r'default via (\S+)', result.stdout)
-            if match:
-                gateway_ip = match.group(1)
-                log(f"Detected upstream gateway IP: {gateway_ip}")
+        # Since eth0/eth1 are in bridge mode, we need to get a DHCP address
+        log(f"Requesting DHCP address on {gateway_iface}...")
         
-        if not gateway_ip:
-            log("WARNING: Could not detect gateway IP - using 10.200.66.254 as default", 'WARNING')
-            gateway_ip = "10.200.66.254"
-        
-        # CRITICAL: Since eth0/eth1 are in bridge mode, we need to:
-        # 1. Assign IP to the gateway interface (eth0) so appliance can route through it
-        # 2. Add a default route pointing through that interface
-        
-        log(f"Configuring {gateway_iface} for internet access...")
-        
-        # Remove any existing IP from gateway interface
-        run_cmd(['ip', 'addr', 'flush', 'dev', gateway_iface])
-        
-        # Add temporary IP to gateway interface (outside bridge subnet)
-        temp_ip = "10.200.67.1/24"
-        result = run_cmd(['ip', 'addr', 'add', temp_ip, 'dev', gateway_iface])
-        if result and result.returncode == 0:
-            log(f"Added temporary IP {temp_ip} to {gateway_iface}")
+        # Kill any existing dhclient on this interface
+        run_cmd(['pkill', '-f', f'dhclient.*{gateway_iface}'])
+        time.sleep(1)
         
         # Bring interface up
         run_cmd(['ip', 'link', 'set', gateway_iface, 'up'])
+        
+        # Request DHCP address
+        result = run_cmd(['dhclient', '-v', gateway_iface], timeout=15)
+        if result and result.returncode == 0:
+            log(f"DHCP request sent on {gateway_iface}")
+        else:
+            log("DHCP request may have failed, checking for IP...", 'WARNING')
+        
+        # Wait a bit for DHCP to complete
+        time.sleep(3)
+        
+        # Verify we got an IP
+        result = run_cmd(['ip', 'addr', 'show', gateway_iface])
+        if result and result.returncode == 0:
+            # Look for inet IP (not inet6)
+            ip_match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)/\d+', result.stdout)
+            if ip_match:
+                assigned_ip = ip_match.group(1)
+                log(f"Got DHCP address: {assigned_ip} on {gateway_iface}", 'SUCCESS')
+            else:
+                log("No IP address assigned via DHCP", 'ERROR')
+                return False
+        
+        # Check default route was added by DHCP
+        result = run_cmd(['ip', 'route', 'show', 'default'])
+        if result and result.returncode == 0 and result.stdout:
+            log(f"Default route: {result.stdout}")
+            if gateway_iface not in result.stdout:
+                log(f"WARNING: Default route not using {gateway_iface}", 'WARNING')
+        else:
+            log("No default route found", 'ERROR')
+            return False
         
         # Enable IP forwarding
         run_cmd(['sysctl', '-w', 'net.ipv4.ip_forward=1'])
         log("IP forwarding enabled")
         
-        # Add default route via the real gateway
-        # Delete existing default routes first
-        run_cmd(['ip', 'route', 'del', 'default'])
-        
-        # Add new default route
-        result = run_cmd(['ip', 'route', 'add', 'default', 'via', gateway_ip, 'dev', gateway_iface])
-        if result and result.returncode == 0:
-            log(f"Default route added: via {gateway_ip} dev {gateway_iface}")
-        else:
-            log("Failed to add default route", 'ERROR')
-        
-        # Setup NAT for bridge traffic
+        # Setup NAT for bridge traffic to go out via gateway interface
         result = run_cmd(['iptables', '-t', 'nat', '-A', 'POSTROUTING', '-o', gateway_iface, '-j', 'MASQUERADE'])
         if result and result.returncode == 0:
             log(f"NAT/MASQUERADE enabled on {gateway_iface}")
@@ -974,10 +973,14 @@ def enable_internet_routing(bridge_name='br0'):
         result = run_cmd(['ping', '-c', '2', '-W', '3', '8.8.8.8'], timeout=8)
         if result and result.returncode == 0:
             log("SUCCESS! Internet routing is working!", 'SUCCESS')
-            log("You can now run: apt update, wget, curl, etc.")
+            log("You can now install Evilginx2, run apt update, etc.")
         else:
-            log("Ping test failed - but routing may still work", 'WARNING')
-            log(f"Try manually: curl -I https://google.com")
+            log("Ping test failed - checking DNS...", 'WARNING')
+            result = run_cmd(['ping', '-c', '1', 'google.com'], timeout=5)
+            if result and result.returncode == 0:
+                log("DNS works! Internet is accessible.")
+            else:
+                log("Check your network connection", 'WARNING')
         
         log(f"Internet routing enabled via {gateway_iface}", 'SUCCESS')
         return True
@@ -993,9 +996,13 @@ def disable_internet_routing(bridge_name='br0'):
     try:
         log("Disabling internet routing...")
         
-        # Find which eth interface was used
+        # Find which eth interface was used and kill dhclient
         for gateway_iface in ['eth0', 'eth1']:
-            # Remove temporary IP
+            # Kill dhclient for this interface
+            result = run_cmd(['pkill', '-f', f'dhclient.*{gateway_iface}'])
+            log(f"Stopped DHCP client on {gateway_iface}")
+            
+            # Flush IP address
             run_cmd(['ip', 'addr', 'flush', 'dev', gateway_iface])
             log(f"Flushed IP from {gateway_iface}")
             
