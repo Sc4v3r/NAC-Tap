@@ -47,8 +47,8 @@ if [ "$OS" = "debian" ]; then
         ethtool \
         wireshark-common \
         net-tools \
-        systemd-timesyncd \
-        ntpdate
+        iptables \
+        ebtables
     
     echo ""
     echo "✓ Debian/Ubuntu packages installed"
@@ -64,8 +64,8 @@ elif [ "$OS" = "redhat" ]; then
         ethtool \
         wireshark-cli \
         net-tools \
-        chrony \
-        ntpdate
+        iptables \
+        ebtables
     
     echo ""
     echo "✓ RedHat/CentOS packages installed"
@@ -77,7 +77,7 @@ echo ""
 
 # Verify tools
 MISSING=""
-for tool in python3 tcpdump ip bridge ethtool capinfos tail timedatectl; do
+for tool in python3 tcpdump ip bridge ethtool capinfos tail iptables ebtables; do
     if command -v $tool >/dev/null 2>&1; then
         VERSION=$(command -v $tool)
         echo "✓ $tool: $VERSION"
@@ -86,17 +86,6 @@ for tool in python3 tcpdump ip bridge ethtool capinfos tail timedatectl; do
         MISSING="$MISSING $tool"
     fi
 done
-
-echo ""
-echo "Enabling and starting NTP time synchronization..."
-if command -v timedatectl >/dev/null 2>&1; then
-    timedatectl set-ntp true 2>/dev/null || echo "  Note: timedatectl set-ntp failed (may need manual config)"
-    echo "✓ NTP sync enabled"
-elif command -v systemctl >/dev/null 2>&1; then
-    systemctl enable chronyd 2>/dev/null || systemctl enable systemd-timesyncd 2>/dev/null || true
-    systemctl start chronyd 2>/dev/null || systemctl start systemd-timesyncd 2>/dev/null || true
-    echo "✓ NTP service started"
-fi
 
 echo ""
 echo "Creating directories..."

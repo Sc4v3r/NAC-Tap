@@ -25,17 +25,12 @@ After setup:
 
 ## Running NAC Tap
 
-### Option 1: Manual Start
+### Option 1: Manual Start (Recommended)
 ```bash
 sudo python3 nac-tap.py
 ```
 
-### Option 2: With Startup Script (starts Wi-Fi AP too)
-```bash
-sudo bash startup-script.sh
-```
-
-### Option 3: Auto-start on Boot (systemd service)
+### Option 2: Auto-start on Boot (systemd service)
 ```bash
 # Copy files to /opt
 sudo mkdir -p /opt/nac-tap
@@ -70,25 +65,62 @@ Then open: **http://localhost:8080** in terminal browser, or forward port
 
 ## Using the Web Interface
 
-### Start Capture
+### Status Tab - Basic Capture
+
+#### Start Capture
 1. Click **▶️ Start Capture**
 2. Bridge automatically created between eth0 and eth1
 3. Packets captured to `/var/log/nac-captures/capture-*.pcap`
 
-### View Credentials (Loot Tab)
+#### View Credentials (Loot Tab)
 1. Click **🎣 Loot** tab
 2. Click **🔍 Analyze PCAP Now**
 3. View raw PCredz output (includes NTLMv2 hashes, passwords, etc.)
 4. Click **⬇️ Export Output (TXT)** to download
 
-### Stop Capture
+#### Stop Capture
 1. Click **⏹️ Stop Capture**
 2. Bridge remains active (transparent)
 3. PCAP file saved and ready for download
 
-### Download PCAP
+#### Download PCAP
 1. Click **⬇️ Download PCAP**
 2. Analyze offline with Wireshark
+
+### MITM Tab - Active Interception
+
+#### Enable MITM Mode
+1. Click **🎭 MITM** tab
+2. (Optional) Enter remote VM IP if routing to external Kali/Responder
+3. Click **🎭 Enable MITM**
+4. Wait 30s for victim learning
+5. Bridge learns victim MAC/IP automatically
+
+#### Intercept Protocols
+Click protocol cards to intercept:
+- **SMB/NetBIOS** (ports 137, 138, 139, 445)
+- **Name Resolution** (LLMNR, mDNS)
+- **HTTP** (port 80)
+
+Traffic redirected to:
+- **Local**: Bridge IP 10.200.66.1 (run Responder/ntlmrelayx on device)
+- **Remote**: Your external attack VM (via WiFi)
+
+#### Run Attack Tools
+On the device or remote VM:
+```bash
+# On bridge IP (local)
+sudo responder -I br0 -wrf
+
+# Or ntlmrelayx
+ntlmrelayx.py -t smb://target -smb2support
+
+# Remote VM gets traffic forwarded automatically
+```
+
+#### Disable MITM
+1. Click **🛑 Disable MITM**
+2. All rules and spoofing cleaned up automatically
 
 ## File Locations
 
