@@ -659,26 +659,22 @@ catch(err){
 console.error("Error updating status:",err);
 }
 }
-async 
-function analyzeNow(){
+async function analyzeNow(){
 const btnAnalyze=document.getElementById("btnAnalyze");if(btnAnalyze)btnAnalyze.disabled=true;showAlert("Running PCredz analysis... This may take a few minutes.","info");try{
 const res=await fetch("/api/analyze",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Analysis complete! Check output below.","success");fetchLoot()}else{showAlert("Analysis failed: "+(data.error||"Unknown error"),"error")}}
 catch(err){showAlert("Error: "+err.message,"error")}finally{if(btnAnalyze)btnAnalyze.disabled=false}}
-async 
-function deletePCAP(){if(confirm("Delete current PCAP file? This cannot be undone!")){try{
+async function deletePCAP(){if(confirm("Delete current PCAP file? This cannot be undone!")){try{
 const res=await fetch("/api/delete_pcap",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("PCAP deleted","success");fetchStatus();fetchLoot()}else{showAlert("Failed to delete PCAP: "+(data.error||"Unknown error"),"error")}}
 catch(err){showAlert("Error: "+err.message,"error")}}}
-async 
-function fetchStatus(){try{
+async function fetchStatus(){try{
 const res=await fetch("/api/status");
 const data=await res.json();updateStatus(data)}
 catch(err){console.error("Failed to fetch status:",err);setTimeout(fetchStatus,5000)}}
-async 
-function fetchLoot(){try{
+async function fetchLoot(){try{
 const res=await fetch("/api/loot");
 const data=await res.json();
 const outputEl=document.getElementById("lootOutput");if(outputEl){
@@ -689,38 +685,32 @@ catch(err){console.error("Failed to fetch loot:",err)}}
 
 function escapeHtml(text){
 const div=document.createElement('div');div.textContent=text;return div.innerHTML}
-async 
-function exportLoot(){try{
+async function exportLoot(){try{
 const res=await fetch("/api/loot");
 const data=await res.json();
 if(data.has_output){window.location.href="/api/loot/export"}else{showAlert("No output to export yet","info")}}
 catch(err){showAlert("Error: "+err.message,"error")}}
-async 
-function clearLoot(){if(confirm("Clear all captured credentials?")){try{
+async function clearLoot(){if(confirm("Clear all captured credentials?")){try{
 const res=await fetch("/api/loot/clear",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Loot cleared","success");fetchLoot()}else{showAlert("Failed to clear loot","error")}}
 catch(err){showAlert("Error: "+err.message,"error")}}}
-async 
-function startCapture(){document.getElementById("btnStart").disabled=true;showAlert("Starting packet capture...","info");try{
+async function startCapture(){document.getElementById("btnStart").disabled=true;showAlert("Starting packet capture...","info");try{
 const res=await fetch("/api/start",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Capture started!","success");setTimeout(fetchStatus,2000);setTimeout(fetchLoot,3000)}else{showAlert("Failed to start. Check logs.","error");document.getElementById("btnStart").disabled=false}}
 catch(err){showAlert("Error: "+err.message,"error");document.getElementById("btnStart").disabled=false}}
-async 
-function stopCapture(){if(confirm("Stop capture? Bridge will remain active.")){document.getElementById("btnStop").disabled=true;showAlert("Stopping capture...","info");try{
+async function stopCapture(){if(confirm("Stop capture? Bridge will remain active.")){document.getElementById("btnStop").disabled=true;showAlert("Stopping capture...","info");try{
 const res=await fetch("/api/stop",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Capture stopped!","success")}else{showAlert("Failed to stop","error")}setTimeout(fetchStatus,3000);setTimeout(fetchLoot,4000)}
 catch(err){showAlert("Error: "+err.message,"error")}}}
-async 
-function downloadPCAP(){try{
+async function downloadPCAP(){try{
 const res=await fetch("/api/status");
 const data=await res.json();
 if(data.pcap_file){window.location.href="/api/download?file="+encodeURIComponent(data.pcap_file)}else{showAlert("No file","error")}}
 catch(err){showAlert("Error: "+err.message,"error")}}
-async 
-function enableMITM(){
+async function enableMITM(){
 const remoteIP=document.getElementById("remoteIP").value.trim();
 const msg=remoteIP?"Enable MITM and route to "+remoteIP+"?\n\nThis will:\n1. Learn victim MAC/IP\n2. Spoof victim identity\n3. Route intercepted traffic to remote VM":"Enable MITM (local mode)?\n\nThis will:\n1. Learn victim MAC/IP\n2. Spoof victim identity\n3. Intercept traffic locally";if(!confirm(msg))return;
 const btnEnableMITM=document.getElementById("btnEnableMITM");if(btnEnableMITM)btnEnableMITM.disabled=true;showAlert("Enabling MITM... Learning victim (30s)","info");try{
@@ -729,27 +719,23 @@ const res=await fetch("/api/mitm/enable",{method:"POST",headers:{"Content-Type":
 const data=await res.json();
 if(data.success){showAlert("MITM enabled! Victim identified.","success");setTimeout(fetchStatus,1000)}else{showAlert("MITM failed: "+(data.error||"Unknown error"),"error");if(btnEnableMITM)btnEnableMITM.disabled=false}}
 catch(err){showAlert("Error: "+err.message,"error");if(btnEnableMITM)btnEnableMITM.disabled=false}}
-async 
-function disableMITM(){if(!confirm("Disable MITM and cleanup all rules?"))return;showAlert("Disabling MITM...","info");try{
+async function disableMITM(){if(!confirm("Disable MITM and cleanup all rules?"))return;showAlert("Disabling MITM...","info");try{
 const res=await fetch("/api/mitm/disable",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("MITM disabled","success");setTimeout(fetchStatus,1000)}}
 catch(err){showAlert("Error: "+err.message,"error")}}
-async 
-function interceptCategory(category){
+async function interceptCategory(category){
 const destination=document.getElementById("remoteIP").value.trim()?'remote':'local';
 const target=destination==='remote'?document.getElementById("remoteIP").value:'bridge IP';if(!confirm("Intercept "+category+" traffic?\n\nDestination: "+target))return;showAlert("Adding "+category+" intercept rules...","info");try{
 const res=await fetch("/api/mitm/intercept",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({category:category,destination:destination})});
 const data=await res.json();
 if(data.success){showAlert(category+" interception enabled ("+data.rules_added+" rules)","success");setTimeout(fetchStatus,1000)}else{showAlert("Failed to add rules","error")}}
 catch(err){showAlert("Error: "+err.message,"error")}}
-async 
-function clearRules(){if(!confirm("Remove all intercept rules?"))return;try{
+async function clearRules(){if(!confirm("Remove all intercept rules?"))return;try{
 const res=await fetch("/api/mitm/clear_rules",{method:"POST"});if(res.ok){showAlert("Rules cleared","success");setTimeout(fetchStatus,1000)}}
 catch(err){showAlert("Error: "+err.message,"error")}}
 
-async 
-function startEvilginx(phishlet){
+async function startEvilginx(phishlet){
 const domain=document.getElementById("evilginxDomain").value.trim();
 const msg=domain?"Start Evilginx with "+phishlet+" phishlet using domain "+domain+"?":"Start Evilginx with "+phishlet+" phishlet using default domain?";if(!confirm(msg))return;document.getElementById("btnStartO365").disabled=true;document.getElementById("btnStartOutlook").disabled=true;showAlert("Starting Evilginx ("+phishlet+")...","info");try{
 const body={phishlet:phishlet};
@@ -759,23 +745,22 @@ const data=await res.json();
 if(data.success){showAlert("Evilginx started! Lure: "+data.lure_url,"success");setTimeout(fetchStatus,1000)}else{showAlert("Failed to start: "+(data.error||"Unknown error"),"error");document.getElementById("btnStartO365").disabled=false;document.getElementById("btnStartOutlook").disabled=false}}
 catch(err){showAlert("Error: "+err.message,"error");document.getElementById("btnStartO365").disabled=false;document.getElementById("btnStartOutlook").disabled=false}}
 
-async 
-function stopEvilginx(){if(!confirm("Stop Evilginx? Captured sessions will be saved."))return;showAlert("Stopping Evilginx...","info");try{
+async function stopEvilginx(){if(!confirm("Stop Evilginx? Captured sessions will be saved."))return;showAlert("Stopping Evilginx...","info");try{
 const res=await fetch("/api/evilginx/stop",{method:"POST"});
 const data=await res.json();
 if(data.success){showAlert("Evilginx stopped","success");setTimeout(fetchStatus,1000)}}
 catch(err){showAlert("Error: "+err.message,"error")}}
 
-async 
-function clearSessions(){if(!confirm("Clear all captured sessions?"))return;try{
+async function clearSessions(){if(!confirm("Clear all captured sessions?"))return;try{
 const res=await fetch("/api/evilginx/clear_sessions",{method:"POST"});if(res.ok){showAlert("Sessions cleared","success");setTimeout(fetchStatus,1000)}}
 catch(err){showAlert("Error: "+err.message,"error")}}
 
 
-function exportSessions(){window.location.href="/api/evilginx/sessions"}
+function exportSessions(){
+window.location.href="/api/evilginx/sessions";
+}
 
-async 
-function installEvilginx(){
+async function installEvilginx(){
 if(!confirm("Install Evilginx2?\n\nThis will:\n- Install Go compiler\n- Clone Evilginx2 repository\n- Build from source\n- Configure permissions\n\nThis may take 5-10 minutes."))return;
 
 const btn=document.getElementById("btnInstallEvilginx");
