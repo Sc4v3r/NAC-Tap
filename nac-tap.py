@@ -1407,6 +1407,29 @@ class NACWebHandler(BaseHTTPRequestHandler):
                     self.send_error(500)
             else:
                 self.send_error(404)
+        
+        # Test page for debugging
+        elif path == '/test':
+            try:
+                # Get script directory dynamically
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                test_file_path = os.path.join(script_dir, 'test-webui.html')
+                
+                if os.path.exists(test_file_path):
+                    with open(test_file_path, 'r') as f:
+                        test_html = f.read()
+                    log(f"Serving test page from: {test_file_path}")
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/html')
+                    self.end_headers()
+                    self.wfile.write(test_html.encode())
+                else:
+                    log(f"Test page not found at: {test_file_path}", 'ERROR')
+                    self.send_error(404, f"Test page not found at: {test_file_path}")
+            except Exception as e:
+                log(f"Test page error: {e}", 'ERROR')
+                self.send_error(404, f"Test page error: {e}")
+        
         else:
             self.send_error(404)
 
@@ -1561,34 +1584,6 @@ class NACWebHandler(BaseHTTPRequestHandler):
                 log(f"Installation endpoint error: {e}", 'ERROR')
                 self._send_json({'success': False, 'error': str(e)})
         
-        # Test page for debugging
-        elif path == '/test':
-            try:
-                # Try multiple locations for the test file
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                possible_paths = [
-                    os.path.join(script_dir, 'test-webui.html'),
-                    '/Users/ben.jacob/Documents/MITM/test-webui.html',
-                    './test-webui.html'
-                ]
-                
-                test_html = None
-                for test_path in possible_paths:
-                    if os.path.exists(test_path):
-                        with open(test_path, 'r') as f:
-                            test_html = f.read()
-                        break
-                
-                if test_html:
-                    self.send_response(200)
-                    self.send_header('Content-type', 'text/html')
-                    self.end_headers()
-                    self.wfile.write(test_html.encode())
-                else:
-                    self.send_error(404, "Test page not found in any location")
-            except Exception as e:
-                self.send_error(404, f"Test page error: {e}")
-            
         else:
             self.send_error(404)
 

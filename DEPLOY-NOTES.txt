@@ -1,0 +1,77 @@
+NAC-Tap Deployment Instructions
+================================
+
+To deploy NAC-Tap to your target device:
+
+1. REQUIRED FILES (keep in same directory):
+   ✓ nac-tap.py
+   ✓ test-webui.html
+   ✓ install-dependencies.sh
+   ✓ install-evilginx.sh (optional)
+   ✓ setup-wifi-ap.sh (optional)
+
+2. DEPLOYMENT STEPS:
+
+   a) Copy all files to target device:
+      scp nac-tap.py test-webui.html install-*.sh user@target-device:/opt/nac-tap/
+
+   b) SSH to target device:
+      ssh user@target-device
+
+   c) Install dependencies:
+      cd /opt/nac-tap
+      chmod +x install-dependencies.sh
+      sudo ./install-dependencies.sh
+
+   d) Run NAC-Tap:
+      sudo python3 nac-tap.py
+
+3. ACCESS WEB UI:
+   
+   From target device:
+   http://localhost:8080
+
+   From another computer:
+   http://TARGET_DEVICE_IP:8080
+
+4. TEST PAGE:
+   
+   http://TARGET_DEVICE_IP:8080/test
+   
+   Use this to verify JavaScript is working before debugging main UI.
+
+5. PATHS ARE DYNAMIC:
+   
+   - No need to edit paths in nac-tap.py
+   - Works in ANY directory
+   - Just keep all files together in same folder
+
+6. OPTIONAL - Install Evilginx:
+   
+   cd /opt/nac-tap
+   sudo ./install-evilginx.sh
+
+7. OPTIONAL - Setup WiFi AP:
+   
+   cd /opt/nac-tap
+   sudo ./setup-wifi-ap.sh
+
+8. SYSTEMD SERVICE (auto-start on boot):
+   
+   See systemd/ directory for service files
+
+TROUBLESHOOTING:
+================
+
+- Check logs: /var/log/auto-nac-bridge.log
+- PCAP files: /var/log/nac-captures/
+- Test page 404? Make sure test-webui.html is in same directory as nac-tap.py
+- Buttons not working? Open browser console (F12) and check for JS errors
+
+NOTES:
+======
+
+- All file paths in nac-tap.py are now relative/dynamic
+- No hardcoded paths to edit
+- Works on any device, any path, any user
+
