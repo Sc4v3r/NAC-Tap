@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 EVILGINX_DIR="/opt/evilginx2"
-GO_VERSION="1.21.5"
+GO_VERSION="1.21.0"  # Using stable version known to work on ARM64
 ARCH=$(uname -m)
 
 # Determine architecture for Go download
@@ -65,14 +65,25 @@ else
     
     cd /tmp
     GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+    GO_URL="https://go.dev/dl/${GO_TARBALL}"
     
     if [ -f "$GO_TARBALL" ]; then
         rm -f "$GO_TARBALL"
     fi
     
-    wget -q --show-progress "https://go.dev/dl/${GO_TARBALL}" || {
+    echo -e "${YELLOW}[INFO]${NC} Downloading from: ${GO_URL}"
+    wget -q --show-progress "${GO_URL}" || {
         echo -e "${RED}[ERROR]${NC} Failed to download Go"
-        exit 1
+        echo -e "${YELLOW}[INFO]${NC} Trying alternative version (1.20.0)..."
+        GO_VERSION="1.20.0"
+        GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+        GO_URL="https://go.dev/dl/${GO_TARBALL}"
+        wget -q --show-progress "${GO_URL}" || {
+            echo -e "${RED}[ERROR]${NC} Failed to download Go ${GO_VERSION}"
+            echo -e "${YELLOW}[INFO]${NC} You may need to install Go manually"
+            echo -e "${YELLOW}[INFO]${NC} Visit: https://go.dev/dl/"
+            exit 1
+        }
     }
     
     # Remove old Go installation
