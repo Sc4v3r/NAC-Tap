@@ -346,6 +346,16 @@ input[type="text"]:focus{outline:none;border-color:#667eea}
 <div id="wifiStatus" style="padding:10px;background:#fff;border-radius:5px;margin-top:10px"></div>
 </div>
 
+<div id="internetTestSection" style="background:#e3f2fd;border-radius:10px;padding:20px;margin-bottom:20px;border-left:4px solid #2196f3;display:none">
+<h3 style="margin-bottom:15px;color:#1976d2">Internet Connectivity Test</h3>
+<div id="internetTestResults" style="background:#fff;border-radius:8px;padding:15px;margin-bottom:15px">
+<div style="text-align:center;color:#999;padding:20px">Click "Test Internet" to run connectivity test</div>
+</div>
+<div class="button-group">
+<button onclick="testInternet()" id="btnTestInternetDetailed" class="btn btn-refresh">Run Internet Test</button>
+</div>
+</div>
+
 <div style="background:#f8f9fa;border-radius:10px;padding:20px;margin-bottom:20px">
 <h3 style="margin-bottom:15px;color:#333">Slack Integration</h3>
 <div style="margin-bottom:15px">
@@ -819,14 +829,21 @@ document.getElementById("wifiSSID").value=ssid;
 function updateCurrentConnection(wifiData){
 const currentConn=document.getElementById("currentConnection");
 const currentConnInfo=document.getElementById("currentConnectionInfo");
+const internetTestSection=document.getElementById("internetTestSection");
 if(currentConn&&currentConnInfo){
 if(wifiData&&wifiData.connected){
 currentConn.style.display="block";
 currentConn.style.borderLeftColor="#28a745";
 currentConnInfo.innerHTML="Interface: <strong>"+(wifiData.interface||"N/A")+"</strong> | SSID: <strong>"+(wifiData.ssid||"N/A")+"</strong> | IP: "+(wifiData.ip_address||"N/A");
+if(internetTestSection){
+internetTestSection.style.display="block";
+}
 }else{
 currentConn.style.display="none";
 currentConnInfo.innerHTML="Not connected";
+if(internetTestSection){
+internetTestSection.style.display="none";
+}
 }
 }
 }
@@ -866,18 +883,54 @@ showAlert("Disconnect failed","error");
 
 async function testInternet(){
 const btnTest=document.getElementById("btnTestInternet");
-if(btnTest)btnTest.disabled=true;
+const btnTestDetailed=document.getElementById("btnTestInternetDetailed");
+const testBtn=btnTestDetailed||btnTest;
+if(testBtn)testBtn.disabled=true;
 showAlert("Testing internet connectivity...","info");
 try{
 const res=await fetch("/api/wifi/test",{method:"POST"});
 const data=await res.json();
 const status=document.getElementById("wifiStatus");
+const testResults=document.getElementById("internetTestResults");
 if(status){
 let html="<strong>Internet Test:</strong><br>";
 html+="Ping: "+(data.ping?"<span style='color:#28a745'>OK</span>":"<span style='color:#dc3545'>FAIL</span>")+"<br>";
 html+="DNS: "+(data.dns?"<span style='color:#28a745'>OK</span>":"<span style='color:#dc3545'>FAIL</span>")+"<br>";
 html+="Status: "+(data.connected?"<span style='color:#28a745'>Connected</span>":"<span style='color:#dc3545'>No Internet</span>");
 status.innerHTML=html;
+}
+if(testResults){
+let html="<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:15px'>";
+html+="<div style='padding:10px;background:#f8f9fa;border-radius:5px'><strong style='display:block;margin-bottom:5px;color:#666'>Ping Test</strong>";
+html+="<div style='font-size:1.5em;font-weight:700;color:"+(data.ping?"#28a745":"#dc3545")+"'>"+(data.ping?"PASS":"FAIL")+"</div>";
+if(data.ping_time){
+html+="<div style='font-size:.85em;color:#666;margin-top:5px'>Avg: "+data.ping_time.toFixed(2)+" ms</div>";
+}
+html+="</div>";
+html+="<div style='padding:10px;background:#f8f9fa;border-radius:5px'><strong style='display:block;margin-bottom:5px;color:#666'>DNS Test</strong>";
+html+="<div style='font-size:1.5em;font-weight:700;color:"+(data.dns?"#28a745":"#dc3545")+"'>"+(data.dns?"PASS":"FAIL")+"</div>";
+if(data.dns_server){
+html+="<div style='font-size:.85em;color:#666;margin-top:5px'>Server: "+data.dns_server+"</div>";
+}
+html+="</div>";
+html+="<div style='padding:10px;background:#f8f9fa;border-radius:5px'><strong style='display:block;margin-bottom:5px;color:#666'>HTTP Test</strong>";
+html+="<div style='font-size:1.5em;font-weight:700;color:"+(data.http?"#28a745":"#dc3545")+"'>"+(data.http?"PASS":"FAIL")+"</div>";
+if(data.http_status){
+html+="<div style='font-size:.85em;color:#666;margin-top:5px'>Status: "+data.http_status+"</div>";
+}
+html+="</div>";
+html+="</div>";
+html+="<div style='padding:15px;background:"+(data.connected?"#d4edda":"#f8d7da")+";border-radius:5px;border-left:4px solid "+(data.connected?"#28a745":"#dc3545")+"'>";
+html+="<strong style='color:"+(data.connected?"#155724":"#721c24")+";display:block;margin-bottom:5px'>Overall Status</strong>";
+html+="<div style='font-size:1.2em;color:"+(data.connected?"#155724":"#721c24")+"'>"+(data.connected?"INTERNET CONNECTED":"NO INTERNET CONNECTION")+"</div>";
+if(data.interface){
+html+="<div style='margin-top:8px;font-size:.9em;color:"+(data.connected?"#155724":"#721c24")+"'>Interface: <strong>"+data.interface+"</strong></div>";
+}
+if(data.gateway){
+html+="<div style='font-size:.9em;color:"+(data.connected?"#155724":"#721c24")+"'>Gateway: <strong>"+data.gateway+"</strong></div>";
+}
+html+="</div>";
+testResults.innerHTML=html;
 }
 if(data.connected){
 showAlert("Internet connectivity OK","success");
@@ -886,8 +939,12 @@ showAlert("Internet connectivity failed","error");
 }
 }catch(err){
 showAlert("Test failed: "+err.message,"error");
+const testResults=document.getElementById("internetTestResults");
+if(testResults){
+testResults.innerHTML="<div style='padding:20px;text-align:center;color:#dc3545'><strong>Test Failed</strong><br>"+err.message+"</div>";
+}
 }finally{
-if(btnTest)btnTest.disabled=false;
+if(testBtn)testBtn.disabled=false;
 }
 }
 

@@ -1393,6 +1393,10 @@ class WiFiManager:
                         self.gateway = gw_match.group(1)
                 
                 self.connected = True
+                
+                # Setup routing for internet access through WLAN
+                self._setup_wlan_routing(interface)
+                
                 # Test internet
                 self.internet_available = self.test_internet_connectivity()['connected']
                 return {'success': True, 'connected': True, 'internet': self.test_internet_connectivity()}
@@ -1404,11 +1408,151 @@ class WiFiManager:
             log(f"WiFi connection error: {e}", 'ERROR')
             return {'success': False, 'error': str(e)}
 
+    def _setup_wlan_routing(self, wlan_interface):
+        """Setup routing so non-private traffic exits through WLAN interface"""
+        try:
+            log(f"Setting up internet routing through {wlan_interface}...")
+            
+            # Get WLAN IP and gateway
+            result = run_cmd(['ip', 'addr', 'show', wlan_interface])
+            wlan_ip = None
+            if result:
+                ip_match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)/\d+', result.stdout)
+                if ip_match:
+                    wlan_ip = ip_match.group(1)
+            
+            result = run_cmd(['ip', 'route', 'show', 'default'])
+            wlan_gateway = None
+            if result:
+                gw_match = re.search(r'default via (\d+\.\d+\.\d+\.\d+)', result.stdout)
+                if gw_match:
+                    wlan_gateway = gw_match.group(1)
+            
+            if not wlan_gateway:
+                log("No default gateway found on WLAN interface", 'WARNING')
+                return False
+            
+            # Enable IP forwarding
+            run_cmd(['sysctl', '-w', 'net.ipv4.ip_forward=1'])
+            log("IP forwarding enabled")
+            
+            # Get bridge and eth interfaces
+            bridge_name = CONFIG.get('BRIDGE_NAME', 'br0')
+            eth_interfaces = []
+            result = run_cmd(['ip', '-o', 'link', 'show'])
+            if result:
+                for line in result.stdout.split('\n'):
+                    if 'eth' in line.lower() and 'link/ether' in line.lower():
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            iface = parts[1].strip().split('@')[0]
+                            if re.match(r'^eth[0-9]', iface):
+                                eth_interfaces.append(iface)
+            
+            # Setup routing table for public IPs via WLAN
+            # Keep private IPs on bridge/eth interfaces
+            private_networks = [
+                '10.0.0.0/8',
+                '172.16.0.0/12',
+                '192.168.0.0/16',
+                '169.254.0.0/16'
+            ]
+            
+            # Add routes for private networks through bridge/eth if needed
+            # These should already exist but ensure they're prioritized for local traffic
+            for eth_iface in eth_interfaces:
+                # Ensure private network routes use eth/bridge, not WLAN
+                for private_net in private_networks:
+                    # Check if route exists
+                    result = run_cmd(['ip', 'route', 'show', private_net])
+                    if not result or private_net not in result.stdout:
+                        # Add route for private network via bridge
+                        run_cmd(['ip', 'route', 'add', private_net, 'dev', bridge_name], check=False)
+            
+            # Ensure default route uses WLAN interface
+            # Remove existing default routes that don't use WLAN
+            result = run_cmd(['ip', 'route', 'show', 'default'])
+            if result and result.stdout:
+                for line in result.stdout.split('\n'):
+                    if 'default' in line and wlan_interface not in line:
+                        # Check if this is a specific default route
+                        if 'via' in line:
+                            # Extract gateway from route
+                            gw_match = re.search(r'via (\S+)', line)
+                            if gw_match and gw_match.group(1) != wlan_gateway:
+                                # Delete the old default route
+                                run_cmd(['ip', 'route', 'del', 'default'], check=False)
+                                break
+            
+            # Add default route via WLAN if not present
+            result = run_cmd(['ip', 'route', 'show', 'default'])
+            if not result or wlan_interface not in result.stdout:
+                run_cmd(['ip', 'route', 'add', 'default', 'via', wlan_gateway, 'dev', wlan_interface])
+                log(f"Added default route via {wlan_gateway} on {wlan_interface}")
+            
+            # Setup NAT/MASQUERADE for traffic going out WLAN
+            # Check if rule already exists
+            result = run_cmd(['iptables', '-t', 'nat', '-C', 'POSTROUTING', '-o', wlan_interface, '-j', 'MASQUERADE'], check=False)
+            if result and result.returncode != 0:
+                # Rule doesn't exist, add it
+                run_cmd(['iptables', '-t', 'nat', '-A', 'POSTROUTING', '-o', wlan_interface, '-j', 'MASQUERADE'])
+                log(f"NAT/MASQUERADE enabled on {wlan_interface}")
+            
+            # Allow forwarding from bridge to WLAN
+            result = run_cmd(['iptables', '-C', 'FORWARD', '-i', bridge_name, '-o', wlan_interface, '-j', 'ACCEPT'], check=False)
+            if result and result.returncode != 0:
+                run_cmd(['iptables', '-I', 'FORWARD', '1', '-i', bridge_name, '-o', wlan_interface, '-j', 'ACCEPT'])
+                log(f"Forwarding rule added: {bridge_name} -> {wlan_interface}")
+            
+            # Allow forwarding from WLAN to bridge (for return traffic)
+            result = run_cmd(['iptables', '-C', 'FORWARD', '-i', wlan_interface, '-o', bridge_name, '-m', 'state', '--state', 'ESTABLISHED,RELATED', '-j', 'ACCEPT'], check=False)
+            if result and result.returncode != 0:
+                run_cmd(['iptables', '-I', 'FORWARD', '1', '-i', wlan_interface, '-o', bridge_name, '-m', 'state', '--state', 'ESTABLISHED,RELATED', '-j', 'ACCEPT'])
+                log(f"Return forwarding rule added: {wlan_interface} -> {bridge_name}")
+            
+            log(f"Internet routing configured for {wlan_interface}", 'SUCCESS')
+            return True
+            
+        except Exception as e:
+            log(f"WLAN routing setup failed: {e}", 'ERROR')
+            import traceback
+            log(traceback.format_exc(), 'ERROR')
+            return False
+
+    def _cleanup_wlan_routing(self, wlan_interface):
+        """Cleanup routing rules for WLAN interface"""
+        try:
+            log(f"Cleaning up routing for {wlan_interface}...")
+            
+            # Remove NAT rules
+            run_cmd(['iptables', '-t', 'nat', '-D', 'POSTROUTING', '-o', wlan_interface, '-j', 'MASQUERADE'], check=False)
+            
+            # Remove forwarding rules
+            bridge_name = CONFIG.get('BRIDGE_NAME', 'br0')
+            run_cmd(['iptables', '-D', 'FORWARD', '-i', bridge_name, '-o', wlan_interface, '-j', 'ACCEPT'], check=False)
+            run_cmd(['iptables', '-D', 'FORWARD', '-i', wlan_interface, '-o', bridge_name, '-m', 'state', '--state', 'ESTABLISHED,RELATED', '-j', 'ACCEPT'], check=False)
+            
+            # Remove default route if it uses WLAN
+            result = run_cmd(['ip', 'route', 'show', 'default'])
+            if result and wlan_interface in result.stdout:
+                run_cmd(['ip', 'route', 'del', 'default'], check=False)
+                log("Removed default route via WLAN")
+            
+            log(f"Routing cleanup completed for {wlan_interface}")
+            return True
+            
+        except Exception as e:
+            log(f"WLAN routing cleanup failed: {e}", 'WARNING')
+            return False
+
     def disconnect_wifi(self):
         """Disconnect from WiFi"""
         try:
-            if self.interface:
-                run_cmd(['nmcli', 'device', 'disconnect', self.interface])
+            wlan_iface = self.interface
+            if wlan_iface:
+                # Cleanup routing before disconnecting
+                self._cleanup_wlan_routing(wlan_iface)
+                run_cmd(['nmcli', 'device', 'disconnect', wlan_iface])
             self.connected = False
             self.ip_address = None
             self.gateway = None
@@ -1419,23 +1563,57 @@ class WiFiManager:
             return False
 
     def test_internet_connectivity(self):
-        """Test internet connectivity"""
+        """Test internet connectivity with detailed results"""
         ping_ok = False
         dns_ok = False
+        http_ok = False
+        ping_time = None
+        dns_server = None
+        http_status = None
         
-        # Test ping
-        result = run_cmd(['ping', '-c', '2', '-W', '3', '8.8.8.8'], timeout=8)
+        # Test ping with timing
+        result = run_cmd(['ping', '-c', '3', '-W', '3', '8.8.8.8'], timeout=10)
         if result and result.returncode == 0:
             ping_ok = True
+            # Extract average time
+            time_match = re.search(r'min/avg/max.*?/([\d.]+)/', result.stdout)
+            if time_match:
+                ping_time = float(time_match.group(1))
         
         # Test DNS
-        result = run_cmd(['nslookup', 'google.com'], timeout=5)
+        result = run_cmd(['nslookup', '-timeout=3', 'google.com'], timeout=6)
         if result and result.returncode == 0:
             dns_ok = True
+            # Extract DNS server used
+            server_match = re.search(r'Server:\s*(\S+)', result.stdout)
+            if server_match:
+                dns_server = server_match.group(1)
+        
+        # Test HTTP connectivity
+        try:
+            import urllib.request
+            req = urllib.request.Request('http://www.google.com', timeout=5)
+            with urllib.request.urlopen(req) as response:
+                if response.status == 200:
+                    http_ok = True
+                    http_status = response.status
+        except:
+            http_ok = False
         
         connected = ping_ok and dns_ok
         self.internet_available = connected
-        return {'ping': ping_ok, 'dns': dns_ok, 'connected': connected}
+        
+        return {
+            'ping': ping_ok,
+            'ping_time': ping_time,
+            'dns': dns_ok,
+            'dns_server': dns_server,
+            'http': http_ok,
+            'http_status': http_status,
+            'connected': connected,
+            'interface': self.interface if self.connected else None,
+            'gateway': self.gateway if self.connected else None
+        }
 
     def get_connection_status(self):
         """Get current WiFi status"""
